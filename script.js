@@ -1,147 +1,116 @@
-/*************************************************************************
- * Create Note Popup Logic
- **************************************************************************/
+const authToken = localStorage.getItem('authToken');
+const userEmail = localStorage.getItem('userEmail'); // You should store the logged-in email in localStorage
 
-function popup() {
+// Fetch notes from the backend
+async function fetchNotes() {
+    try {
+        const response = await fetch(`http://localhost:3000/notes/${userEmail}`, {
+            headers: { 'Authorization': `Bearer ${authToken}` },
+        });
 
-    const popupContainer = document.createElement("div");
-
-    popupContainer.innerHTML = `
-    <div id="popupContainer">
-        <h1>New Note</h1>
-        <textarea id="note-text" placeholder="Enter your note..."></textarea>
-        <div id="btn-container">
-            <button id="submitBtn" onclick="createNote()">Create Note</button>
-            <button id="closeBtn" onclick="closePopup()">Close</button>
-        </div>
-    </div>
-    `;
-    document.body.appendChild(popupContainer);
-}
-
-function closePopup() {
-    const popupContainer = document.getElementById("popupContainer");
-    if(popupContainer) {
-        popupContainer.remove();
+        const data = await response.json();
+        if (data.notes) {
+            displayNotes(data.notes);
+        }
+    } catch (error) {
+        console.error('Error fetching notes:', error);
     }
 }
 
-function createNote() {
+// Create a new note
+async function createNote() {
+    const noteText = document.getElementById('note-text').value.trim();
+    if (noteText !== '') {
+        try {
+            const response = await fetch('http://localhost:3000/create-note', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify({ email: userEmail, noteText }),
+            });
 
-    const popupContainer = document.getElementById('popupContainer');
-    const noteText = document.getElementById('note-text').value;
-    if (noteText.trim() !== '') {
-        const note = {
-        id: new Date().getTime(),
-        text: noteText
-        };
-
-        const existingNotes = JSON.parse(localStorage.getItem('notes')) || [];
-        existingNotes.push(note);
-
-        localStorage.setItem('notes', JSON.stringify(existingNotes));
-
-        document.getElementById('note-text').value = '';
-
-        popupContainer.remove();
-        displayNotes();
+            const result = await response.json();
+            if (response.ok) {
+                alert(result.message);
+                fetchNotes(); // Reload the notes after creation
+            } else {
+                alert('Failed to create the note');
+            }
+        } catch (error) {
+            console.error('Error creating note:', error);
+            alert('Failed to create the note');
+        }
+    } else {
+        alert("Note cannot be empty!");
     }
 }
 
+// Delete a note
+async function deleteNote(noteId) {
+    try {
+        const response = await fetch(`http://localhost:3000/delete-note/${noteId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${authToken}` },
+        });
 
-/*************************************************************************
- * Display Notes Logic
- **************************************************************************/
+        const result = await response.json();
+        if (response.ok) {
+            alert(result.message);
+            fetchNotes(); // Reload the notes after deletion
+        } else {
+            alert('Failed to delete the note');
+        }
+    } catch (error) {
+        console.error('Error deleting note:', error);
+    }
+}
 
-function displayNotes() {
+// Update a note
+async function updateNote(noteId) {
+    const noteText = document.getElementById('note-text').value.trim();
+    if (noteText !== '') {
+        try {
+            const response = await fetch(`http://localhost:3000/update-note/${noteId}`, {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify({ noteText }),
+            });
+
+            const result = await response.json();
+            if (response.ok) {
+                alert(result.message);
+                fetchNotes(); // Reload the notes after update
+            } else {
+                alert('Failed to update the note');
+            }
+        } catch (error) {
+            console.error('Error updating note:', error);
+        }
+    } else {
+        alert("Note cannot be empty!");
+    }
+}
+
+// Display notes on the page
+function displayNotes(notes) {
     const notesList = document.getElementById('notes-list');
     notesList.innerHTML = '';
-
-    const notes = JSON.parse(localStorage.getItem('notes')) || [];
 
     notes.forEach(note => {
         const listItem = document.createElement('li');
         listItem.innerHTML = `
-        <span>${note.text}</span>
-        <div id="noteBtns-container">
-            <button id="editBtn" onclick="editNote(${note.id})"><i class="fa-solid fa-pen"></i></button>
-            <button id="deleteBtn" onclick="deleteNote(${note.id})"><i class="fa-solid fa-trash"></i></button>
-        </div>
+            <span>${note.note_text}</span>
+            <button onclick="deleteNote(${note.id})">Delete</button>
+            <button onclick="editNote(${note.id}, '${note.note_text}')">Edit</button>
         `;
         notesList.appendChild(listItem);
     });
 }
 
-
-/*************************************************************************
- * Edit Note Popup Logic
- **************************************************************************/
-
-function editNote(noteId) {
-    const notes = JSON.parse(localStorage.getItem('notes')) || [];
-    const noteToEdit = notes.find(note => note.id == noteId);
-    const noteText = noteToEdit ? noteToEdit.text : '';
-    const editingPopup = document.createElement("div");
-    
-    editingPopup.innerHTML = `
-    <div id="editing-container" data-note-id="${noteId}">
-        <h1>Edit Note</h1>
-        <textarea id="note-text">${noteText}</textarea>
-        <div id="btn-container">
-            <button id="submitBtn" onclick="updateNote()">Done</button>
-            <button id="closeBtn" onclick="closeEditPopup()">Cancel</button>
-        </div>
-    </div>
-    `;
-
-    document.body.appendChild(editingPopup);
-}
-
-function closeEditPopup() {
-    const editingPopup = document.getElementById("editing-container");
-
-    if(editingPopup) {
-        editingPopup.remove();
-    }
-}
-
-function updateNote() {
-    const noteText = document.getElementById('note-text').value.trim();
-    const editingPopup = document.getElementById('editing-container');
-
-    if (noteText !== '') {
-        const noteId = editingPopup.getAttribute('data-note-id');
-        let notes = JSON.parse(localStorage.getItem('notes')) || [];
-
-        // Find the note to update
-        const updatedNotes = notes.map(note => {
-            if (note.id == noteId) {
-                return { id: note.id, text: noteText };
-            }
-            return note;
-        });
-
-        // Update the notes in local storage
-        localStorage.setItem('notes', JSON.stringify(updatedNotes));
-
-        // Close the editing popup
-        editingPopup.remove();
-
-        // Refresh the displayed notes
-        displayNotes();
-    }
-}
-
-/*************************************************************************
- * Delete Note Logic
- **************************************************************************/
-
-function deleteNote(noteId) {
-    let notes = JSON.parse(localStorage.getItem('notes')) || [];
-    notes = notes.filter(note => note.id !== noteId);
-
-    localStorage.setItem('notes', JSON.stringify(notes));
-    displayNotes();
-}
-
-displayNotes();
+// Call fetchNotes() on page load to display notes
+fetchNotes();
