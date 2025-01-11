@@ -6,23 +6,30 @@
     <title>Note App - Login</title>
     <link rel="stylesheet" href="./style.css">
     <script src="./login.js" defer></script>
+    <script src="./register.js" defer></script> <!-- Link to the register.js file -->
 </head>
 <body>
     <h1>Welcome to the Note App</h1>
 
+    <!-- Registration Form -->
     <div id="register">
         <h2>Register</h2>
-        <input type="email" id="registerEmail" placeholder="Enter email" />
-        <input type="password" id="registerPassword" placeholder="Enter password" />
-        <button onclick="registerUser()">Register</button>
+        <form id="registerForm" onsubmit="event.preventDefault(); registerUser();">
+            <input type="email" id="registerEmail" placeholder="Enter email" required />
+            <input type="password" id="registerPassword" placeholder="Enter password" required />
+            <button type="submit">Register</button>
+        </form>
         <p id="registerError" style="color: red;"></p>
     </div>
 
+    <!-- Login Form -->
     <div id="login">
         <h2>Login</h2>
-        <input type="email" id="loginEmail" placeholder="Enter email" />
-        <input type="password" id="loginPassword" placeholder="Enter password" />
-        <button onclick="loginUser()">Login</button>
+        <form id="loginForm" onsubmit="event.preventDefault(); loginUser();">
+            <input type="email" id="loginEmail" placeholder="Enter email" required />
+            <input type="password" id="loginPassword" placeholder="Enter password" required />
+            <button type="submit">Login</button>
+        </form>
         <p id="loginError" style="color: red;"></p>
     </div>
 </body>
