@@ -1,0 +1,500 @@
+
+/*
+modify my code , here's the sturcture of my code:                                                                                      /frontend
+  - index.html
+  (<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Note Taking App</title>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<script>
+  const token = localStorage.getItem('authToken');
+  if (!token) {
+    window.location.href = './login.html';
+  }
+</script>
+<body>
+    <div id="container">
+        <div id="list-header">
+            <div id="addNoteDiv" onclick="popup()">
+                <i class="fa-solid fa-plus"></i>
+            </div>
+            <div class="blankDiv"></div>
+            <div class="blankDiv"></div>
+        </div>
+        
+        <div id="list-container">
+            <ul id="notes-list"></ul>
+        </div>
+    </div>
+
+    <script src="./script.js"></script>
+</body>
+</html>
+)
+  - login.html
+  (<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Note App - Login</title>
+    <link rel="stylesheet" href="./style.css">
+    <script src="./login.js" defer></script>
+</head>
+<body>
+    <h1>Welcome to the Note App</h1>
+
+    <div id="register">
+        <h2>Register</h2>
+        <input type="email" id="registerEmail" placeholder="Enter email" />
+        <input type="password" id="registerPassword" placeholder="Enter password" />
+        <button onclick="registerUser()">Register</button>
+        <p id="registerError" style="color: red;"></p>
+    </div>
+
+    <div id="login">
+        <h2>Login</h2>
+        <input type="email" id="loginEmail" placeholder="Enter email" />
+        <input type="password" id="loginPassword" placeholder="Enter password" />
+        <button onclick="loginUser()">Login</button>
+        <p id="loginError" style="color: red;"></p>
+    </div>
+</body>
+</html>
+)
+  - login.js
+  (async function loginUser() {
+    const email = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+
+    if (!email || !password) {
+        alert('Email and password are required!');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            localStorage.setItem('authToken', result.token);
+            localStorage.setItem('userEmail', email);
+            window.location.href = 'index.html'; // Redirect to main page
+        } else {
+            alert(result.message);
+        }
+    } catch (error) {
+        alert('An error occurred during login.');
+    }
+}
+)
+  - script.js
+  (async function fetchNotes() {
+    const token = localStorage.getItem('authToken');
+    const userEmail = localStorage.getItem('userEmail');
+    
+    if (!token || !userEmail) {
+        window.location.href = './login.html';
+    }
+
+    try {
+        const response = await fetch(`/api/notes/${userEmail}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+
+        const data = await response.json();
+        if (data.notes) {
+            displayNotes(data.notes);
+        }
+    } catch (error) {
+        console.error('Error fetching notes:', error);
+    }
+}
+
+async function createNote() {
+    const noteText = document.getElementById('note-text').value.trim();
+    const token = localStorage.getItem('authToken');
+    const userEmail = localStorage.getItem('userEmail');
+    
+    if (noteText !== '') {
+        try {
+            const response = await fetch('/api/create-note', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'Authorization': `Bearer ${token}` 
+                },
+                body: JSON.stringify({ email: userEmail, noteText }),
+            });
+
+            const result = await response.json();
+            if (response.ok) {
+                alert(result.message);
+                fetchNotes();
+            } else {
+                alert('Failed to create note');
+            }
+        } catch (error) {
+            alert('Failed to create note');
+        }
+    } else {
+        alert("Note cannot be empty!");
+    }
+}
+
+function displayNotes(notes) {
+    const notesList = document.getElementById('notes-list');
+    notesList.innerHTML = '';
+    
+    notes.forEach(note => {
+        const listItem = document.createElement('li');
+        listItem.innerHTML = `
+            <span>${note.note_text}</span>
+            <button onclick="deleteNote(${note.id})">Delete</button>
+            <button onclick="editNote(${note.id}, '${note.note_text}')">Edit</button>
+        `;
+        notesList.appendChild(listItem);
+    });
+}
+
+fetchNotes();
+)
+  - style.css
+/backend
+  /api
+    - login.js
+    (import mysql from 'mysql2';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const db = mysql.createConnection({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+});
+
+const SECRET_KEY = process.env.SECRET_KEY;
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Method not allowed' });
+  }
+
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required' });
+  }
+
+  db.execute('SELECT * FROM users WHERE email = ?', [email], (err, results) => {
+    if (err) {
+      return res.status(500).json({ message: 'Error logging in', error: err.message });
+    }
+    if (!results.length) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    const user = results[0];
+    bcrypt.compare(password, user.password, (err, isMatch) => {
+      if (err || !isMatch) {
+        return res.status(401).json({ message: 'Invalid email or password' });
+      }
+
+      const token = jwt.sign({ email: user.email }, SECRET_KEY, { expiresIn: '1h' });
+
+      res.status(200).json({ message: 'Login successful', token });
+    });
+  });
+}
+)
+    - register.js
+    (import mysql from 'mysql2';
+import bcrypt from 'bcrypt';
+
+const db = mysql.createConnection({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+});
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Method not allowed' });
+  }
+
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required' });
+  }
+
+  bcrypt.hash(password, 10, (err, hashedPassword) => {
+    if (err) {
+      return res.status(500).json({ message: 'Error registering user', error: err.message });
+    }
+
+    db.execute('INSERT INTO users (email, password) VALUES (?, ?)', [email, hashedPassword], (err) => {
+      if (err) {
+        return res.status(500).json({ message: 'Error registering user', error: err.message });
+      }
+
+      res.status(201).json({ message: 'User registered successfully' });
+    });
+  });
+}
+)
+    - create-note.js
+    (import mysql from 'mysql2';
+import jwt from 'jsonwebtoken';
+
+const db = mysql.createConnection({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+});
+
+const SECRET_KEY = process.env.SECRET_KEY;
+
+export default async function handler(req, res) {
+    if (req.method !== 'POST') {
+        return res.status(405).json({ message: 'Method not allowed' });
+    }
+
+    const { noteText } = req.body;
+    const authToken = req.headers.authorization?.split(' ')[1];
+
+    if (!authToken) {
+        return res.status(401).json({ message: 'Authorization required' });
+    }
+
+    try {
+        const decoded = jwt.verify(authToken, SECRET_KEY);
+        const email = decoded.email;
+
+        if (!noteText) {
+            return res.status(400).json({ message: 'Note text is required' });
+        }
+
+        db.query(
+            `SELECT id FROM users WHERE email = ?`,
+            [email],
+            (err, results) => {
+                if (err) {
+                    return res.status(500).json({ message: 'Error fetching user', error: err.message });
+                }
+
+                const userId = results[0]?.id;
+
+                if (!userId) {
+                    return res.status(404).json({ message: 'User not found' });
+                }
+
+                db.query(
+                    `INSERT INTO notes (user_id, note_text) VALUES (?, ?)`,
+                    [userId, noteText],
+                    (err) => {
+                        if (err) {
+                            return res.status(500).json({ message: 'Error creating note', error: err.message });
+                        }
+                        res.status(201).json({ message: 'Note created successfully' });
+                    }
+                );
+            }
+        );
+    } catch (error) {
+        return res.status(401).json({ message: 'Invalid token', error: error.message });
+    }
+})
+    - delete-note.js
+    (import mysql from 'mysql2';
+import jwt from 'jsonwebtoken';
+
+const db = mysql.createConnection({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+});
+
+const SECRET_KEY = process.env.SECRET_KEY;
+
+export default async function handler(req, res) {
+    const { noteId } = req.query;
+    const authToken = req.headers.authorization?.split(' ')[1];
+
+    if (!authToken) {
+        return res.status(401).json({ message: 'Authorization required' });
+    }
+
+    try {
+        const decoded = jwt.verify(authToken, SECRET_KEY);
+        const email = decoded.email;
+
+        db.query(
+            `SELECT id FROM users WHERE email = ?`,
+            [email],
+            (err, results) => {
+                if (err) {
+                    return res.status(500).json({ message: 'Error fetching user', error: err.message });
+                }
+
+                const userId = results[0]?.id;
+
+                if (!userId) {
+                    return res.status(404).json({ message: 'User not found' });
+                }
+
+                db.query(
+                    `DELETE FROM notes WHERE id = ? AND user_id = ?`,
+                    [noteId, userId],
+                    (err) => {
+                        if (err) {
+                            return res.status(500).json({ message: 'Error deleting note', error: err.message });
+                        }
+                        res.status(200).json({ message: 'Note deleted successfully' });
+                    }
+                );
+            }
+        );
+    } catch (error) {
+        return res.status(401).json({ message: 'Invalid token', error: error.message });
+    }
+}
+)
+    - update-note.js
+    (import mysql from 'mysql2';
+import jwt from 'jsonwebtoken';
+
+const db = mysql.createConnection({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+});
+
+const SECRET_KEY = process.env.SECRET_KEY;
+
+export default async function handler(req, res) {
+    const { noteId } = req.query;
+    const { noteText } = req.body;
+    const authToken = req.headers.authorization?.split(' ')[1];
+
+    if (!authToken) {
+        return res.status(401).json({ message: 'Authorization required' });
+    }
+
+    if (!noteText) {
+        return res.status(400).json({ message: 'Note text is required' });
+    }
+
+    try {
+        const decoded = jwt.verify(authToken, SECRET_KEY);
+        const email = decoded.email;
+
+        db.query(
+            `SELECT id FROM users WHERE email = ?`,
+            [email],
+            (err, results) => {
+                if (err) {
+                    return res.status(500).json({ message: 'Error fetching user', error: err.message });
+                }
+
+                const userId = results[0]?.id;
+
+                if (!userId) {
+                    return res.status(404).json({ message: 'User not found' });
+                }
+
+                db.query(
+                    `UPDATE notes SET note_text = ? WHERE id = ? AND user_id = ?`,
+                    [noteText, noteId, userId],
+                    (err) => {
+                        if (err) {
+                            return res.status(500).json({ message: 'Error updating note', error: err.message });
+                        }
+                        res.status(200).json({ message: 'Note updated successfully' });
+                    }
+                );
+            }
+        );
+    } catch (error) {
+        return res.status(401).json({ message: 'Invalid token', error: error.message });
+    }
+}
+)
+   /node_modules
+   db.js 
+   (const mysql = require('mysql2');
+const dotenv = require('dotenv');
+
+// Load environment variables from .env file
+dotenv.config();
+
+// Create a connection to the database
+const connection = mysql.createConnection({
+ host: process.env.DB_HOST,
+ user: process.env.DB_USER,
+ password: process.env.DB_PASSWORD,
+ database: process.env.DB_NAME,
+});
+
+// Connect to the database
+connection.connect((err) => {
+ if (err) {
+     console.error('Error connecting to MySQL:', err.message);
+     return;
+ }
+ console.log('Connected to MySQL database');
+});
+
+module.exports = connection;
+)
+   - package.json
+   - package-lock.json
+/node_modules 
+- .env
+(DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=ALxmdbrn102030 
+DB_NAME=a-note_app_db
+SECRET_KEY= secret-key      
+)
+- package.json
+- package-lock.json
+- vercel.json
+({
+    "version": 2,
+    "builds": [
+      {
+        "src": "frontend/index.html",
+        "use": "@vercel/static"
+      },
+      {
+        "src": "backend/api/**/*.js",
+        "use": "@vercel/node"
+      }
+    ],
+    "routes": [
+      { "src": "/(.*)", "dest": "/frontend/$1" },
+      { "src": "/api/(.*)", "dest": "/backend/api/$1" }
+    ]
+  }
+  )
+
+*/
