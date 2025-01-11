@@ -1,25 +1,29 @@
-db.execute('SELECT * FROM users WHERE email = ?', [email], (err, results) => {
-  if (err) {
-      return res.status(500).json({ message: 'Error checking user', error: err.message });
-  }
-  if (results.length > 0) {
-      return res.status(400).json({ message: 'User already exists' });
-  }
+// register.js
+async function registerUser() {
+    const email = document.getElementById('registerEmail').value.trim();
+    const password = document.getElementById('registerPassword').value.trim();
 
-  bcrypt.hash(password, 10, (err, hashedPassword) => {
-      if (err) {
-          return res.status(500).json({ message: 'Error registering user', error: err.message });
-      }
+    if (!email || !password) {
+        alert('Email and password are required!');
+        return;
+    }
 
-      db.execute(
-          'INSERT INTO users (email, password) VALUES (?, ?)',
-          [email, hashedPassword],
-          (err) => {
-              if (err) {
-                  return res.status(500).json({ message: 'Error registering user', error: err.message });
-              }
-              res.status(201).json({ message: 'User registered successfully' });
-          }
-      );
-  });
-});
+    try {
+        const response = await fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            alert('Registration successful! Please log in.'); 
+            window.location.href = 'login.html'; // Redirect to login page after successful registration
+        } else {
+            alert(result.message || 'Registration failed. Please try again.');
+        }
+    } catch (error) {
+        alert('An error occurred. Please check your connection.');
+    }
+}
