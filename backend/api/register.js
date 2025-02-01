@@ -1,29 +1,27 @@
-// register.js
-async function registerUser() {
-    const email = document.getElementById('registerEmail').value.trim();
-    const password = document.getElementById('registerPassword').value.trim();
+// backend/api/register.js
+import { auth, db, admin } from "../firebase.js";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
 
-    if (!email || !password) {
-        alert('Email and password are required!');
-        return;
-    }
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ message: "Method not allowed" });
+  }
 
-    try {
-        const response = await fetch('/api/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password }),
-        });
+  const { email, password } = req.body;
 
-        const result = await response.json();
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
 
-        if (response.ok) {
-            alert('Registration successful! Please log in.'); 
-            window.location.href = 'login.html'; // Redirect to login page after successful registration
-        } else {
-            alert(result.message || 'Registration failed. Please try again.');
-        }
-    } catch (error) {
-        alert('An error occurred. Please check your connection.');
-    }
+    // Store user details in Firestore
+    await setDoc(doc(db, "users", user.uid), {
+      email,
+      createdAt: new Date(),
+    });
+
+    res.status(201).json({ message: "User registered successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 }
