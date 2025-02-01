@@ -1,6 +1,6 @@
 
 /*
-modify my code , here's the sturcture of my code:                                                                                      /frontend
+the sturcture of my code:                                                                                      /frontend
 a-note-app :
   .vscode
   backend 
@@ -14,7 +14,7 @@ a-note-app :
     firebase.js
     package-lock.json
     package.json
-    serviceserviceAccountKey.json
+    serviceAccountKey.json
   frontend
     index.html
     login.html
@@ -59,60 +59,49 @@ export default async function handler(req, res) {
 }
 )
         delete-note.js(//backend/api/delete-note.js
-import mysql from 'mysql2';
-import jwt from 'jsonwebtoken';
-
-const db = mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-});
-
-const SECRET_KEY = process.env.SECRET_KEY;
+import { db } from "../firebase.js";
+import { doc, deleteDoc, getDoc } from "firebase/firestore";
+import admin from "firebase-admin";
 
 export default async function handler(req, res) {
-    const { noteId } = req.query;
-    const authToken = req.headers.authorization?.split(' ')[1];
+  if (req.method !== "DELETE") {
+    return res.status(405).json({ message: "Method not allowed" });
+  }
 
-    if (!authToken) {
-        return res.status(401).json({ message: 'Authorization required' });
+  const { noteId } = req.query;
+  const authToken = req.headers.authorization?.split(" ")[1];
+
+  if (!authToken) {
+    return res.status(401).json({ message: "Authorization required" });
+  }
+
+  try {
+    // Verify the user's token
+    const decodedToken = await admin.auth().verifyIdToken(authToken);
+    const userEmail = decodedToken.email;
+
+    // Get the note from Firestore
+    const noteRef = doc(db, "notes", noteId);
+    const noteSnap = await getDoc(noteRef);
+
+    if (!noteSnap.exists()) {
+      return res.status(404).json({ message: "Note not found" });
     }
 
-    try {
-        const decoded = jwt.verify(authToken, SECRET_KEY);
-        const email = decoded.email;
-
-        db.query(
-            `SELECT id FROM users WHERE email = ?`,
-            [email],
-            (err, results) => {
-                if (err) {
-                    return res.status(500).json({ message: 'Error fetching user', error: err.message });
-                }
-
-                const userId = results[0]?.id;
-
-                if (!userId) {
-                    return res.status(404).json({ message: 'User not found' });
-                }
-
-                db.query(
-                    `DELETE FROM notes WHERE id = ? AND user_id = ?`,
-                    [noteId, userId],
-                    (err) => {
-                        if (err) {
-                            return res.status(500).json({ message: 'Error deleting note', error: err.message });
-                        }
-                        res.status(200).json({ message: 'Note deleted successfully' });
-                    }
-                );
-            }
-        );
-    } catch (error) {
-        return res.status(401).json({ message: 'Invalid token', error: error.message });
+    const noteData = noteSnap.data();
+    if (noteData.email !== userEmail) {
+      return res.status(403).json({ message: "Unauthorized to delete this note" });
     }
+
+    // Delete the note
+    await deleteDoc(noteRef);
+    res.status(200).json({ message: "Note deleted successfully" });
+
+  } catch (error) {
+    res.status(500).json({ message: "Error deleting note", error: error.message });
+  }
 }
+
 )
         login.js(///backend/api/login.js
 import { auth, admin } from "../firebase.js";
@@ -166,98 +155,85 @@ export default async function handler(req, res) {
 }
 )
         update-note.js(//backend/api/update-note.js
-import mysql from 'mysql2';
-import jwt from 'jnsowebtoken';
-
-const db = mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-});
-
-const SECRET_KEY = process.env.SECRET_KEY;
+import { db } from "../firebase.js";
+import { doc, updateDoc, getDoc } from "firebase/firestore";
+import admin from "firebase-admin";
 
 export default async function handler(req, res) {
-    const { noteId } = req.query;
-    const { noteText } = req.body;
-    const authToken = req.headers.authorization?.split(' ')[1];
+  if (req.method !== "PUT") {
+    return res.status(405).json({ message: "Method not allowed" });
+  }
 
-    if (!authToken) {
-        return res.status(401).json({ message: 'Authorization required' });
+  const { noteId } = req.query;
+  const { noteText } = req.body;
+  const authToken = req.headers.authorization?.split(" ")[1];
+
+  if (!authToken) {
+    return res.status(401).json({ message: "Authorization required" });
+  }
+
+  if (!noteText || noteText.trim() === "") {
+    return res.status(400).json({ message: "Note text cannot be empty" });
+  }
+
+  try {
+    // Verify the user's token
+    const decodedToken = await admin.auth().verifyIdToken(authToken);
+    const userEmail = decodedToken.email;
+
+    // Get the note from Firestore
+    const noteRef = doc(db, "notes", noteId);
+    const noteSnap = await getDoc(noteRef);
+
+    if (!noteSnap.exists()) {
+      return res.status(404).json({ message: "Note not found" });
     }
 
-    if (!noteText) {
-        return res.status(400).json({ message: 'Note text is required' });
+    const noteData = noteSnap.data();
+    if (noteData.email !== userEmail) {
+      return res.status(403).json({ message: "Unauthorized to update this note" });
     }
 
-    try {
-        const decoded = jwt.verify(authToken, SECRET_KEY);
-        const email = decoded.email;
+    // Update the note
+    await updateDoc(noteRef, { noteText });
+    res.status(200).json({ message: "Note updated successfully" });
 
-        db.query(
-            `SELECT id FROM users WHERE email = ?`,
-            [email],
-            (err, results) => {
-                if (err) {
-                    return res.status(500).json({ message: 'Error fetching user', error: err.message });
-                }
-
-                const userId = results[0]?.id;
-
-                if (!userId) {
-                    return res.status(404).json({ message: 'User not found' });
-                }
-
-                db.query(
-                    `UPDATE notes SET note_text = ? WHERE id = ? AND user_id = ?`,
-                    [noteText, noteId, userId],
-                    (err) => {
-                        if (err) {
-                            return res.status(500).json({ message: 'Error updating note', error: err.message });
-                        }
-                        res.status(200).json({ message: 'Note updated successfully' });
-                    }
-                );
-            }
-        );
-    } catch (error) {
-        return res.status(401).json({ message: 'Invalid token', error: error.message });
-    }
-    
-    if (!noteText || noteText.trim() === '') {
-        return res.status(400).json({ message: 'Note text cannot be empty' });
-    }
-    
+  } catch (error) {
+    res.status(500).json({ message: "Error updating note", error: error.message });
+  }
 }
+
 )
     -node_modules
     firebase.js(import admin from "firebase-admin";
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import serviceAccount from "./serviceAccountKey.json" assert { type: "json" };
+import fs from "fs";
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
+// Load service account key from file system
+const serviceAccount = JSON.parse(fs.readFileSync("./serviceAccountKey.json", "utf8"));
+
+// Initialize Firebase Admin SDK (For Backend)
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+}
+
+const adminDB = admin.firestore();
+
 
 const firebaseConfig = {
-    
+// my credential
   };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-export { auth, db, admin };
-)
-    package-lock.json
-    package.json({
-  "dependencies": {
-    "firebase": "^11.2.0"
-  }
-}
+export { auth, db, adminDB };
+
 )
     serviceserviceAccountKey.json()
   frontend
@@ -417,13 +393,13 @@ async function fetchNotes() {
   vercel.json({
   "version": 2,
   "builds": [
-    { "src": "frontend/index.html", "use": "@vercel/static" },
-    { "src": "backend/api/**/*.js", "use": "@vercel/node" }
+    { "src": "backend/api/*.js", "use": "@vercel/node" },
+    { "src": "frontend/*", "use": "@vercel/static" }
   ],
   "routes": [
-    { "src": "/(.*)", "dest": "/frontend/$1" },
-    { "src": "/api/(.*)", "dest": "/backend/api/$1" }
+    { "src": "/api/(.*)", "dest": "/backend/api/$1" },
+    { "src": "/(.*)", "dest": "/frontend/$1" }
   ]
 }
-)
+  )
 */
