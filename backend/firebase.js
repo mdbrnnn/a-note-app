@@ -3,9 +3,10 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+// Load service account key from file system
+const serviceAccount = JSON.parse(fs.readFileSync("./serviceAccountKey.json", "utf8"));
 
-// مقداردهی اولیه Firebase Admin فقط یک بار
+// Initialize Firebase Admin SDK (For Backend)
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
